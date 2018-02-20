@@ -6,4 +6,4 @@ python:
 
 script:
 
-  - python3 -m unittest discover
+  - python -m unittest discover
