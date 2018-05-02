@@ -17,7 +17,7 @@ try:
         client_socket.sendall(mess.encode())
         # Recieve 1kB of data from the server
         data = client_socket.recv(1024)
-        print('Response: ' + data.decode() + '\n')
+        print('Response:\n' + data.decode() + '\n')
 
 finally:
     print('Closing socket')

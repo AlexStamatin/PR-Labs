@@ -1,13 +1,11 @@
-import datetime
 import socket
-import sys
 import threading
 import random
 import string
 
 def help_info(arg):
     info = ''
-    for key, value in commands.items():
+    for key, value in command_descriptions.items():
         info += key + value + '\n'
     return info
 
@@ -27,6 +25,7 @@ def nextchar(chars):
 
 
 def randpass(arg):
+    arg = int(arg)
     try:
         if arg < 6 or arg > 20:
             return "Length outside (6-20) range"
@@ -48,56 +47,113 @@ def dice(arg):
     return random.choice(['1', '2', '3', '4', '5', '6'])
 
 
-def damerau_levenshtein_distance(a, b):
-    # "Infinity" -- greater than maximum possible edit distance
-    # Used to prevent transpositions for first characters
-    INF = len(a) + len(b)
+def handle_commands(command, param):
+    try:
+        func = commands.get(command)
+        if func == None:
+            raise KeyError
+        print(command, param)
+        return func(param)
+    except KeyError:
+        return find_similar_commands(command)
 
-    # Matrix: (M + 2) x (N + 2)
-    matrix  = [[INF for n in range(len(b) + 2)]]
-    matrix += [[INF] + range(len(b) + 1)]
-    matrix += [[INF, m] + [0] * len(b) for m in range(1, len(a) + 1)]
 
-    # Holds last row each element was encountered: `DA` in the Wikipedia pseudocode
-    last_row = {}
+def find_similar_commands(invalid_command):
+    similar = {}
+    for valid in command_descriptions:
+        distance = damerau_levenshtein_distance(invalid_command, valid)
+        similar[valid] = distance
+    similar = min(similar, key=similar.get)
+    if len(similar):
+        return 'Invalid command entered. Did you mean ' + similar + ' ?'
+    else:
+        return 'Invalid command entered'
 
-    # Fill in costs
-    for row in range(1, len(a) + 1):
-        # Current character in `a`
-        ch_a = a[row-1]
 
-        # Column of last match on this row: `DB` in pseudocode
-        last_match_col = 0
 
-        for col in range(1, len(b) + 1):
-            # Current character in `b`
-            ch_b = b[col-1]
 
-            # Last row with matching character; `i1` in pseudocode
-            last_matching_row = last_row.get(ch_b, 0)
 
-            # Cost of substitution
-            cost = 0 if ch_a == ch_b else 1
+def damerau_levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+        return damerau_levenshtein_distance(s2, s1)
 
-            # Compute substring distance
-            matrix[row+1][col+1] = min(
-                matrix[row][col] + cost, # Substitution
-                matrix[row+1][col] + 1,  # Addition
-                matrix[row][col+1] + 1,  # Deletion
+        # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
 
-                # Transposition
-                matrix[last_matching_row][last_match_col]
-                    + (row - last_matching_row - 1) + 1
-                    + (col - last_match_col - 1))
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[
+                             j + 1] + 1  # j+1 instead of j since previous_row and current_row are one character longer
+            deletions = current_row[j] + 1  # than s2
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
 
-            # If there was a match, update last_match_col
-            # Doing this here lets me be rid of the `j1` variable from the original pseudocode
-            if cost == 0:
-                last_match_col = col
+    return previous_row[-1]
 
-        # Update last row for current character
-        last_row[ch_a] = row
+commands = {
+    '/help': help_info,
+    '/hello': hello,
+    '/flip' : flip,
+    '/dice' : dice,
+    '/password' : randpass
+}
 
-    # Return last element
-    return matrix[-1][-1]
+
+command_descriptions = {
+    '/dice': '- Virtually role a six-sided die',
+    '/flip': '- Virtually flip a coin',
+    '/help': ' - Shows available commands',
+    '/hello': '- Shows a greeting message. Parameter : name',
+    '/password': '- Generates a random password. Parameter : password length',
+
+}
+
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+server_socket.bind(('127.0.0.1', 8080))
+
+# Start listening on socket, maximum number of queued connections - 10
+server_socket.listen(10)
+print('Socket initialised')
+
+
+def process(client_message):
+    param = ''
+    message_arrg = client_message.strip().split(' ')
+    if len(message_arrg) == 2:
+        command, param = message_arrg
+    elif len(message_arrg) == 1:
+        command = message_arrg[0]
+    else:
+        return "Wrong command Commander! Your message should have the format /command <param> or /command. Try /help"
+    return handle_commands(command, param)
+
+
+def handle_client_connection(connection):
+    # infinite loop so that function do not terminate and thread do not end.
+    while True:
+
+        # Receiving from client
+        data = connection.recv(1024)
+        reply = process(data.decode()).encode()
+        if not data:
+            break
+
+        connection.sendall(reply)
+
+    # came out of loop
+    connection.close()
+
+while 1:
+    # wait to accept a connection - blocking call
+    connection, address = server_socket.accept()
+    print('Connected with ' + address[0] + ':' + str(address[1]))
+
+    thread = threading.Thread(target=handle_client_connection, args=(connection,))
+    thread.start()
 
