@@ -3,6 +3,7 @@ import threading
 import random
 import string
 
+
 def help_info(arg):
     info = ''
     for key, value in command_descriptions.items():
@@ -10,10 +11,8 @@ def help_info(arg):
     return info
 
 
-
 def hello(arg):
     return 'Hello ' + arg
-
 
 
 def flip(arg):
@@ -25,8 +24,8 @@ def nextchar(chars):
 
 
 def randpass(arg):
-    arg = int(arg)
     try:
+        arg = int(arg)
         if arg < 6 or arg > 20:
             return "Length outside (6-20) range"
         length = arg - 3
@@ -68,9 +67,6 @@ def find_similar_commands(invalid_command):
         return 'Invalid command entered. Did you mean ' + similar + ' ?'
     else:
         return 'Invalid command entered'
-
-
-
 
 
 def damerau_levenshtein_distance(s1, s2):
@@ -130,7 +126,7 @@ def process(client_message):
     elif len(message_arrg) == 1:
         command = message_arrg[0]
     else:
-        return "Wrong command Commander! Your message should have the format /command <param> or /command. Try /help"
+        return "Wrong command"
     return handle_commands(command, param)
 
 
